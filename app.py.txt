@@ -1,0 +1,164 @@
+from flask import Flask, request, send_file, render_template_string
+import os
+
+app = Flask(__name__)
+
+html = """ <!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GIS Converters</title>
+  <style>
+    body {font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;margin:0;padding:0;background:#f2f2f2;}
+    .converter-section {max-width:400px;margin:50px auto;background:#fff;padding:30px 40px;border-radius:15px;box-shadow:0 10px 30px rgba(0,0,0,0.1);}
+    .converter-section h2 {color:#333;margin-bottom:20px;text-align:center;}
+    .converter-section select,
+    .converter-section input[type=file] {display:block;margin:20px auto;padding:10px;border-radius:8px;border:1px solid #ccc;width:100%;}
+    .converter-section input[type=submit] {background:#5563DE;color:white;padding:12px 25px;border:none;border-radius:10px;cursor:pointer;font-size:16px;transition:background 0.3s ease;display:block;margin:0 auto;}
+    .converter-section input[type=submit]:hover {background:#3742a8;}
+    .converter-section .footer {margin-top:15px;font-size:14px;color:#777;text-align:center;}
+  </style>
+</head>
+<body>
+
+  <div class="converter-section">
+    <h2>GIS Format Converter</h2>
+    <form method="post" enctype="multipart/form-data">
+      <select name="conversion_type" required>
+        <option value="">-- Select Conversion --</option>
+        <option value="geojson_to_shp">GeoJSON → SHP</option>
+        <option value="shp_to_geojson">SHP → GeoJSON</option>
+        <option value="kml_to_shp">KML → SHP</option>
+        <option value="gpkg_to_shp">GPKG → SHP</option>
+        <option value="csv_to_shp">CSV → SHP</option>
+        <option value="pdf_to_dxf">PDF → DXF</option>
+        <option value="tif_to_tifcog">Raster TIF → COG TIF</option>
+      </select>
+
+      <input type="file" name="file" required>
+      <input type="submit" value="Convert">
+    </form>
+    <div class="footer">Supported GIS Formats</div>
+  </div>
+
+</body>
+</html>
+ """
+
+@app.route("/", methods=["GET","POST"])
+def index():
+    if request.method == "POST":
+        conv = request.form["conversion_type"]
+        uploaded = request.files["file"]
+
+        return f"Received: {conv} and file: {uploaded.filename}"
+
+    return render_template_string(html)
+
+if __name__ == "__main__":
+    app.run()
+
+
+----------------------------------------------test 1--------------------
+from flask import Flask, request, send_file, render_template_string
+import geopandas as gpd
+import os
+import zipfile
+from datetime import datetime
+import shutil
+
+app = Flask(__name__)
+
+# HTML مع قائمة التحويلات
+html = """
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GIS Format Converter</title>
+  <style>
+    body {font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;margin:0;padding:0;background:#f2f2f2;}
+    .converter-section {max-width:400px;margin:50px auto;background:#fff;padding:30px 40px;border-radius:15px;box-shadow:0 10px 30px rgba(0,0,0,0.1);}
+    .converter-section h2 {color:#333;margin-bottom:20px;text-align:center;}
+    .converter-section select,
+    .converter-section input[type=file] {display:block;margin:20px auto;padding:10px;border-radius:8px;border:1px solid #ccc;width:100%;}
+    .converter-section input[type=submit] {background:#5563DE;color:white;padding:12px 25px;border:none;border-radius:10px;cursor:pointer;font-size:16px;transition:background 0.3s ease;display:block;margin:0 auto;}
+    .converter-section input[type=submit]:hover {background:#3742a8;}
+    .converter-section .footer {margin-top:15px;font-size:14px;color:#777;text-align:center;}
+  </style>
+</head>
+<body>
+  <div class="converter-section">
+    <h2>GIS Format Converter</h2>
+    <form method="post" enctype="multipart/form-data">
+      <select name="conversion_type" required>
+        <option value="">-- Select Conversion --</option>
+        <option value="geojson_to_shp">GeoJSON → SHP</option>
+        <option value="shp_to_geojson">SHP → GeoJSON</option>
+        <option value="kml_to_shp">KML → SHP</option>
+        <option value="gpkg_to_shp">GPKG → SHP</option>
+        <option value="csv_to_shp">CSV → SHP</option>
+        <option value="pdf_to_dxf">PDF → DXF</option>
+        <option value="tif_to_tifcog">Raster TIF → COG TIF</option>
+      </select>
+      <input type="file" name="file" required>
+      <input type="submit" value="Convert">
+    </form>
+    <div class="footer">Supported GIS Formats</div>
+  </div>
+</body>
+</html>
+"""
+
+# مجلد مؤقت للرفع والاخراج
+UPLOAD_FOLDER = "uploads"
+OUTPUT_FOLDER = "output"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+
+@app.route("/", methods=["GET","POST"])
+def index():
+    if request.method == "POST":
+        conv = request.form["conversion_type"]
+        uploaded = request.files["file"]
+        filename = uploaded.filename
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+        uploaded.save(filepath)
+
+        # GeoJSON → SHP فقط في هذا الإصدار
+        if conv == "geojson_to_shp":
+            try:
+                gdf = gpd.read_file(filepath)
+
+                # مجلد مؤقت للتصدير
+                base_name = os.path.splitext(filename)[0]
+                shp_folder = os.path.join(OUTPUT_FOLDER, base_name)
+                if os.path.exists(shp_folder):
+                    shutil.rmtree(shp_folder)
+                os.makedirs(shp_folder, exist_ok=True)
+
+                # حفظ Shapefile
+                shp_path = os.path.join(shp_folder, f"{base_name}.shp")
+                gdf.to_file(shp_path)
+
+                # ضغط كل ملفات Shapefile في ZIP
+                zip_name = f"{base_name}.zip"
+                zip_path = os.path.join(OUTPUT_FOLDER, zip_name)
+                with zipfile.ZipFile(zip_path, 'w') as zipf:
+                    for f in os.listdir(shp_folder):
+                        zipf.write(os.path.join(shp_folder, f), arcname=f)
+
+                return send_file(zip_path, as_attachment=True)
+
+            except Exception as e:
+                return f"Error during conversion: {e}"
+
+        else:
+            return f"The conversion '{conv}' is not implemented yet."
+
+    return render_template_string(html)
+
+if __name__ == "__main__":
+    app.run(debug=True)
