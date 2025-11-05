@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<!--
+Created using JS Bin
+http://jsbin.com
+
+Copyright (c) 2025 by anonymous (http://jsbin.com/felogivade/1/edit)
+
+Released under the MIT license: http://jsbin.mit-license.org
+-->
+<meta name="robots" content="noindex">
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<title>CartoMaroc - Outils SIG</title>
+
+<!-- OpenLayers -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/ol.css">
+<script src="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.js"></script>
+
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; }
+  #map { width: 100%; height: 550px; }
+  #toolbar {
+    text-align:center;
+    margin:8px 0;
+  }
+  button {
+    background:#0078d7; color:white; border:none;
+    border-radius:6px; padding:6px 12px;
+    margin:0 3px; cursor:pointer; font-size:14px;
+    transition: background 0.2s;
+  }
+  button.active {
+    background: #444; /* لون مميز عند التفعيل */
+  }
+  button:hover { background:#005fa3; }
+  .ol-tooltip {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 3px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .ol-tooltip-static {
+    background-color: #ffcc33;
+    color: black;
+    border: 1px solid white;
+  }
+</style>
+</head>
+<body>
+  <div style="text-align:center; font-weight:bold;">@CartoMaroc</div>
+  <div id="toolbar">
+    <button id="drawPoint">📍 Point</button>
+    <button id="drawLine">📏 Ligne</button>
+    <button id="drawPolygon">⬠ Polygone</button>
+    <button id="clearAll">🗑 Effacer tout</button>
+    <button id="downloadGeoJSON">💾 Télécharger GeoJSON</button>
+  </div>
+  <div id="map"></div>
+
+<script>
+  // --- Base: Satellite + Labels
+  const satellite = new ol.layer.Tile({
+    source: new ol.source.XYZ({
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      attributions: 'Source: Esri, Earthstar Geographics'
+    })
+  });
+
+  const labels = new ol.layer.Tile({
+    source: new ol.source.XYZ({
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+      attributions: 'Esri - Boundaries & Places'
+    })
+  });
+
+  // --- Couche des objets dessinés ---
+  const source = new ol.source.Vector();
+  const vector = new ol.layer.Vector({
+    source: source,
+    style: new ol.style.Style({
+      fill: new ol.style.Fill({color: 'rgba(0, 200, 150, 0.4)'}),
+      stroke: new ol.style.Stroke({color: '#00b894', width: 2}),
+      image: new ol.style.Circle({radius: 6, fill: new ol.style.Fill({color: '#0984e3'})})
+    })
+  });
+
+  // --- Initialisation de la carte ---
+  const map = new ol.Map({
+    target: 'map',
+    layers: [satellite, labels, vector],
+    view: new ol.View({ center: ol.proj.fromLonLat([-9, 30]), zoom: 6 })
+  });
+
+  let draw = null;
+  let activeButton = null;
+
+  // --- Gestion des popups ---
+  const overlay = new ol.Overlay({
+    element: document.createElement('div'),
+    offset: [0, -15],
+    positioning: 'bottom-center'
+  });
+  overlay.getElement().className = 'ol-tooltip ol-tooltip-static';
+  map.addOverlay(overlay);
+
+  map.on('click', function(evt) {
+    if (draw) return; // لا نعرض Popup أثناء الرسم
+    overlay.setPosition(undefined);
+    map.forEachFeatureAtPixel(evt.pixel, function(feature) {
+      const coord = evt.coordinate;
+      overlay.getElement().innerHTML = feature.get('popup') || '';
+      overlay.setPosition(coord);
+    });
+  });
+
+  // --- Fonction pour activer/désactiver le dessin ---
+  function toggleDraw(type, buttonId) {
+    const button = document.getElementById(buttonId);
+
+    // إذا كان نفس الزر نشط، نلغي التفعيل
+    if (activeButton === button) {
+      deactivateDraw();
+      return;
+    }
+
+    // تعطيل التفعيل السابق
+    deactivateDraw();
+
+    // تفعيل الجديد
+    activeButton = button;
+    button.classList.add('active');
+    draw = new ol.interaction.Draw({ source: source, type: type });
+    map.addInteraction(draw);
+
+    draw.on('drawend', function(e) {
+      const feature = e.feature;
+      const geom = feature.getGeometry();
+      const name = prompt("📝 Entrez le nom de la forme :", "Objet_" + (source.getFeatures().length));
+      feature.set('name', name || "Objet");
+
+      let text = "";
+      if (geom.getType() === "Point") {
+        const coord = ol.proj.toLonLat(geom.getCoordinates());
+        text = `Longitude: ${coord[0].toFixed(6)}<br>Latitude: ${coord[1].toFixed(6)}`;
+      } 
+      else if (geom.getType() === "LineString") {
+        const length = ol.sphere.getLength(geom);
+        text = `Longueur: ${(length/1000).toFixed(3)} km (${length.toFixed(0)} m)`;
+      } 
+      else if (geom.getType() === "Polygon") {
+        const area = ol.sphere.getArea(geom);
+        text = `Surface: ${area.toFixed(0)} m² (${(area/10000).toFixed(3)} ha, ${(area/1e6).toFixed(4)} km²)`;
+      }
+
+      feature.set('popup', `<b>${feature.get('name')}</b><br>${text}`);
+      deactivateDraw(); // بعد الانتهاء من الرسم، العودة للوضع العادي
+    });
+  }
+
+  // --- Désactiver le dessin ---
+  function deactivateDraw() {
+    if (draw) {
+      map.removeInteraction(draw);
+      draw = null;
+    }
+    if (activeButton) {
+      activeButton.classList.remove('active');
+      activeButton = null;
+    }
+  }
+
+  // --- Boutons ---
+  document.getElementById('drawPoint').onclick = () => toggleDraw('Point', 'drawPoint');
+  document.getElementById('drawLine').onclick = () => toggleDraw('LineString', 'drawLine');
+  document.getElementById('drawPolygon').onclick = () => toggleDraw('Polygon', 'drawPolygon');
+
+  document.getElementById('clearAll').onclick = () => {
+    source.clear();
+    overlay.setPosition(undefined);
+  };
+
+  document.getElementById('downloadGeoJSON').onclick = () => {
+    if (source.getFeatures().length === 0) {
+      alert("⚠️ Aucun objet dessiné !");
+      return;
+    }
+    const format = new ol.format.GeoJSON();
+    const json = format.writeFeatures(source.getFeatures(), {
+      featureProjection: map.getView().getProjection(),
+      dataProjection: 'EPSG:4326'
+    });
+    const blob = new Blob([json], {type: "application/geo+json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const date = new Date().toISOString().slice(0,19).replace(/[T:]/g,"-");
+    a.download = "CartoMaroc_"+date+".geojson";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+</script>
+</body>
+</html>
