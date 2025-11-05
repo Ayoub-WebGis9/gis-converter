@@ -33,6 +33,18 @@ Released under the MIT license: http://jsbin.mit-license.org
     gap: 6px;
     align-items: center;
 }
+  #footer {
+  position: absolute;
+  bottom: 10px;       /* يبعد 10px عن أسفل الصفحة */
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.8); /* خلفية شبه شفافة */
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: bold;
+  z-index: 1000;
+}
+
   button {
     background:#0087d7;
     color:white;
@@ -61,7 +73,7 @@ Released under the MIT license: http://jsbin.mit-license.org
 </style>
 </head>
 <body>
-  <div style="text-align:center; font-weight:bold;">@CartoMaroc</div>
+  <div id="footer">© CartoMaroc</div>
   <div id="toolbar">
     <button id="drawPoint">📍 Point</button>
     <button id="drawLine">📏 Ligne</button>
