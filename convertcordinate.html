@@ -101,14 +101,13 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/Worl
     opacity: 1
 }).addTo(map);
 
-// حدود المناطق (خطوط أفقية متقطعة باللون الأصفر)
+// خطوط المناطق التقريبية
 var boundaries = [
   { lat: 31.5 },
   { lat: 27.45 },
   { lat: 23.9667 }
 ];
 
-// رسم الخطوط من الغرب (-13.5) إلى الشرق (-0.5) لتغطية كامل المغرب
 boundaries.forEach(b => {
   L.polyline([[b.lat, -13.5], [b.lat, -0.5]], {
     color: 'red',
@@ -120,65 +119,79 @@ boundaries.forEach(b => {
 
 var marker;
   
-  function toDMS(dec){
-    const deg = Math.floor(dec);
-    const minFloat = (Math.abs(dec - deg)) * 60;
-    const min = Math.floor(minFloat);
-    const sec = Math.round((minFloat - min) * 60);
-    return `${deg}°${min}'${sec}"`;
+function toDMS(dec){
+  const deg = Math.floor(dec);
+  const minFloat = (Math.abs(dec - deg)) * 60;
+  const min = Math.floor(minFloat);
+  const sec = Math.round((minFloat - min) * 60);
+  return `${deg}°${min}'${sec}"`;
 }
 
+map.on("click", async function(e){
+  var lat = e.latlng.lat;
+  var lng = e.latlng.lng;
 
-map.on("click", function(e){
-    var lat = e.latlng.lat;
-    var lng = e.latlng.lng;
+  if (marker) map.removeLayer(marker);
 
-    if (marker) map.removeLayer(marker);
+  marker = L.marker([lat, lng]).addTo(map)
+            .bindPopup(`Lat: ${lat.toFixed(6)}<br>Lng: ${lng.toFixed(6)}`)
+            .openPopup();
 
-    marker = L.marker([lat, lng]).addTo(map)
-              .bindPopup(`Lat: ${lat.toFixed(6)}<br>Lng: ${lng.toFixed(6)}`)
-              .openPopup();
+  // جلب الارتفاع من خدمة Open-Elevation
+  let z = await getElevation(lat, lng);
 
-    var zone = document.getElementById("zone").value;
-    var coordsText = `
-<p><b>Lat:</b> ${lat.toFixed(6)} &nbsp; <b>Lng:</b> ${lng.toFixed(6)}</p>
-<p><b>DMS:</b>  ${toDMS(lat)} , ${toDMS(lng)}</p>
-`;
+  var zone = document.getElementById("zone").value;
+  var {x, y} = convertCoords(lat, lng, zone);
 
-    coordsText += `<p><b>${zone}:</b> ${convertCoords(lat, lng, zone)}</p>`;
-    coordsText += `<span class="copy-btn" onclick="copyCoords('${lat.toFixed(6)}, ${lng.toFixed(6)}')">نسخ الإحداثيات</span>`;
-    document.getElementById("coords").innerHTML = coordsText;
+  var coordsText = `
+  <p><b>Lat:</b> ${lat.toFixed(6)} &nbsp; <b>Lng:</b> ${lng.toFixed(6)}</p>
+  <p><b>DMS:</b> ${toDMS(lat)} , ${toDMS(lng)}</p>
+  <p><b>${zone}:</b><br>
+  <b>x:</b> ${x} &nbsp; <b>y:</b> ${y} &nbsp; <b>z:</b> ${z} m</p>
+  <span class="copy-btn" onclick="copyCoords('x:${x}, y:${y}, z:${z}m')">نسخ الإحداثيات (x, y, z)</span>`;
+
+  document.getElementById("coords").innerHTML = coordsText;
 });
 
 function convertCoords(lat, lng, zone){
-    // تحويل تقريبي إلى Merchich (تمثيلي لأغراض العرض فقط)
-    let x, y;
-    switch(zone){
-        case "nord_maroc":
-            x = 140000 + (lng + 5) * 4000;
-            y = 400000 + (lat - 34) * 9000;
-            break;
-        case "sud_maroc":
-            x = 140000 + (lng + 5) * 4000;
-            y = 200000 + (lat - 30) * 9000;
-            break;
-        case "nord_sahara":
-            x = 140000 + (lng + 5) * 4000;
-            y = 100000 + (lat - 27) * 9000;
-            break;
-        case "sud_sahara":
-            x = 140000 + (lng + 5) * 4000;
-            y = 50000 + (lat - 25) * 9000;
-            break;
-    }
-    return `${Math.round(x)} , ${Math.round(y)}`;
+  let x, y;
+  switch(zone){
+      case "nord_maroc":
+          x = 140000 + (lng + 5) * 4000;
+          y = 400000 + (lat - 34) * 9000;
+          break;
+      case "sud_maroc":
+          x = 140000 + (lng + 5) * 4000;
+          y = 200000 + (lat - 30) * 9000;
+          break;
+      case "nord_sahara":
+          x = 140000 + (lng + 5) * 4000;
+          y = 100000 + (lat - 27) * 9000;
+          break;
+      case "sud_sahara":
+          x = 140000 + (lng + 5) * 4000;
+          y = 50000 + (lat - 25) * 9000;
+          break;
+  }
+  return { x: Math.round(x), y: Math.round(y) };
+}
+
+// دالة لجلب الارتفاع من Open-Elevation
+async function getElevation(lat, lng){
+  try {
+    let response = await fetch(`https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lng}`);
+    let data = await response.json();
+    return data.results[0].elevation;
+  } catch (e) {
+    console.warn("تعذر جلب الارتفاع", e);
+    return "N/A";
+  }
 }
 
 function copyCoords(text){
-    navigator.clipboard.writeText(text);
-    alert("تم نسخ الإحداثيات!");
+  navigator.clipboard.writeText(text);
+  alert("تم نسخ الإحداثيات!");
 }
 </script>
 </body>
 </html>
-
