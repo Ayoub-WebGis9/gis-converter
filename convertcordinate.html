@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<!--
+Created using JS Bin
+http://jsbin.com
+
+Copyright (c) 2025 by anonymous (http://jsbin.com/felogivade/1/edit)
+
+Released under the MIT license: http://jsbin.mit-license.org
+-->
+<meta name="robots" content="noindex">
+<html lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>محول الإحداثيات - CartoMaroc</title>
+
+<!-- مكتبة proj4 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
+
+<style>
+  body {
+    font-family: "Segoe UI", Tahoma, sans-serif;
+    background: #f5f6fa;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    margin: 0;
+  }
+  .container {
+    background: white;
+    padding: 20px 30px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    text-align: center;
+    width: 340px;
+  }
+  h2 {
+    margin-bottom: 10px;
+    color: #0078d7;
+  }
+  input, select, button {
+    width: 100%;
+    padding: 10px;
+    margin: 6px 0;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    font-size: 15px;
+  }
+  button {
+    background: #0078d7;
+    color: white;
+    cursor: pointer;
+    border: none;
+  }
+  button:hover {
+    background: #005fa3;
+  }
+  .result {
+    margin-top: 15px;
+    background: #f0f8ff;
+    padding: 10px;
+    border-radius: 6px;
+    direction: ltr;
+  }
+  footer {
+    position: fixed;
+    bottom: 10px;
+    text-align: center;
+    width: 100%;
+    font-weight: bold;
+    color: #0078d7;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h2>🔁 محول الإحداثيات</h2>
+    <p>من / إلى WGS84 و Merchich</p>
+
+    <label>خط الطول (Longitude):</label>
+    <input type="number" id="lon" placeholder="-7.5" step="any">
+
+    <label>خط العرض (Latitude):</label>
+    <input type="number" id="lat" placeholder="33.7" step="any">
+
+    <select id="direction">
+      <option value="wgs-to-merchich">WGS84 ➜ Merchich</option>
+      <option value="merchich-to-wgs">Merchich ➜ WGS84</option>
+    </select>
+
+    <button onclick="convert()">تحويل</button>
+
+    <div class="result" id="result">النتيجة ستظهر هنا</div>
+  </div>
+
+  <footer>© CartoMaroc</footer>
+
+<script>
+  // تعريف النظامين
+  proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
+  proj4.defs("EPSG:26191", "+proj=lambert_conformal_conic +lat_1=33.3 +lat_2=35.9 +lat_0=33.3 +lon_0=-5.4 +x_0=500000 +y_0=300000 +ellps=clrk80 +towgs84=-123,39,36,0,0,0,0 +units=m +no_defs");
+
+  function convert() {
+    const lon = parseFloat(document.getElementById("lon").value);
+    const lat = parseFloat(document.getElementById("lat").value);
+    const direction = document.getElementById("direction").value;
+    const resultDiv = document.getElementById("result");
+
+    if (isNaN(lon) || isNaN(lat)) {
+      resultDiv.innerHTML = "⚠️ الرجاء إدخال قيم صحيحة.";
+      return;
+    }
+
+    let output;
+    if (direction === "wgs-to-merchich") {
+      const res = proj4("EPSG:4326", "EPSG:26191", [lon, lat]);
+      output = `X: ${res[0].toFixed(3)} m<br>Y: ${res[1].toFixed(3)} m`;
+    } else {
+      const res = proj4("EPSG:26191", "EPSG:4326", [lon, lat]);
+      output = `Longitude: ${res[0].toFixed(6)}<br>Latitude: ${res[1].toFixed(6)}`;
+    }
+
+    resultDiv.innerHTML = `<b>📍 النتيجة:</b><br>${output}`;
+  }
+</script>
+</body>
+</html>
