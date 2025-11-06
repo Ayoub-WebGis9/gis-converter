@@ -1,13 +1,4 @@
 <!DOCTYPE html>
-<!--
-Created using JS Bin
-http://jsbin.com
-
-Copyright (c) 2025 by anonymous (http://jsbin.com/felogivade/1/edit)
-
-Released under the MIT license: http://jsbin.mit-license.org
--->
-<meta name="robots" content="noindex">
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
@@ -20,43 +11,54 @@ Released under the MIT license: http://jsbin.mit-license.org
 <style>
   html, body { margin: 0; padding: 0; height: 100%; }
   #map { width: 100%; height: 100vh; }
+
+  /* شريط الأدوات */
   #toolbar {
     position: absolute;
     top: 10px;
     left: 50%;
     transform: translateX(-50%);
     background: white;
-    padding: 6px 10px;
-    border-radius: 8px;
+    padding: 10px 14px;
+    border-radius: 10px;
     z-index: 1000;
     display: flex;
-    gap: 6px;
+    gap: 10px;
     align-items: center;
-}
-  #footer {
-  position: absolute;
-  bottom: 10px;       /* يبعد 10px عن أسفل الصفحة */
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(255, 255, 255, 0.8); /* خلفية شبه شفافة */
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-weight: bold;
-  z-index: 1000;
-}
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    font-size: 15px;
+  }
 
   button {
     background:#0087d7;
     color:white;
     border:none;
-    border-radius:6px;
-    padding:6px 12px;
+    border-radius:8px;
+    padding:8px 14px;
     cursor:pointer;
-}
+    font-size: 8px;
+    transition: 0.2s;
+  }
   button.active {
-    background: #444; /* لون مميز عند التفعيل */
+    background: #444;
+    transform: scale(1.05);
   }
   button:hover { background:#005fa3; }
+
+  /* التوقيع */
+  #footer {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 255, 255, 0.8);
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-weight: bold;
+    z-index: 1000;
+    font-size: 14px;
+  }
+
   .ol-tooltip {
     position: absolute;
     background: rgba(0, 0, 0, 0.7);
@@ -74,17 +76,20 @@ Released under the MIT license: http://jsbin.mit-license.org
 </head>
 <body>
   <div id="footer">© CartoMaroc</div>
+
   <div id="toolbar">
     <button id="drawPoint">📍 Point</button>
     <button id="drawLine">📏 Ligne</button>
     <button id="drawPolygon">⬠ Polygone</button>
+    <button id="deleteFeature">🧹 Supprimer</button>
     <button id="clearAll">🗑 Effacer tout</button>
     <button id="downloadGeoJSON">💾 Télécharger GeoJSON</button>
   </div>
+
   <div id="map"></div>
 
 <script>
-  // --- Base: Satellite + Labels
+  // --- Base Layers ---
   const satellite = new ol.layer.Tile({
     source: new ol.source.XYZ({
       url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -99,7 +104,7 @@ Released under the MIT license: http://jsbin.mit-license.org
     })
   });
 
-  // --- Couche des objets dessinés ---
+  // --- Couche de dessin ---
   const source = new ol.source.Vector();
   const vector = new ol.layer.Vector({
     source: source,
@@ -119,8 +124,9 @@ Released under the MIT license: http://jsbin.mit-license.org
 
   let draw = null;
   let activeButton = null;
+  let deleteMode = false;
 
-  // --- Gestion des popups ---
+  // --- Tooltip ---
   const overlay = new ol.Overlay({
     element: document.createElement('div'),
     offset: [0, -15],
@@ -129,8 +135,20 @@ Released under the MIT license: http://jsbin.mit-license.org
   overlay.getElement().className = 'ol-tooltip ol-tooltip-static';
   map.addOverlay(overlay);
 
+  // --- Clic sur la carte ---
   map.on('click', function(evt) {
-    if (draw) return; // لا نعرض Popup أثناء الرسم
+    if (draw) return;
+
+    if (deleteMode) {
+      // حذف الشكل عند النقر عليه
+      map.forEachFeatureAtPixel(evt.pixel, function(feature) {
+        if (confirm("🧹 Supprimer cet élément ?")) {
+          source.removeFeature(feature);
+        }
+      });
+      return;
+    }
+
     overlay.setPosition(undefined);
     map.forEachFeatureAtPixel(evt.pixel, function(feature) {
       const coord = evt.coordinate;
@@ -139,20 +157,16 @@ Released under the MIT license: http://jsbin.mit-license.org
     });
   });
 
-  // --- Fonction pour activer/désactiver le dessin ---
+  // --- Fonction pour activer le dessin ---
   function toggleDraw(type, buttonId) {
     const button = document.getElementById(buttonId);
-
-    // إذا كان نفس الزر نشط، نلغي التفعيل
     if (activeButton === button) {
       deactivateDraw();
       return;
     }
-
-    // تعطيل التفعيل السابق
     deactivateDraw();
+    deleteMode = false;
 
-    // تفعيل الجديد
     activeButton = button;
     button.classList.add('active');
     draw = new ol.interaction.Draw({ source: source, type: type });
@@ -168,22 +182,20 @@ Released under the MIT license: http://jsbin.mit-license.org
       if (geom.getType() === "Point") {
         const coord = ol.proj.toLonLat(geom.getCoordinates());
         text = `Longitude: ${coord[0].toFixed(6)}<br>Latitude: ${coord[1].toFixed(6)}`;
-      } 
-      else if (geom.getType() === "LineString") {
+      } else if (geom.getType() === "LineString") {
         const length = ol.sphere.getLength(geom);
         text = `Longueur: ${(length/1000).toFixed(3)} km (${length.toFixed(0)} m)`;
-      } 
-      else if (geom.getType() === "Polygon") {
+      } else if (geom.getType() === "Polygon") {
         const area = ol.sphere.getArea(geom);
         text = `Surface: ${area.toFixed(0)} m² (${(area/10000).toFixed(3)} ha, ${(area/1e6).toFixed(4)} km²)`;
       }
 
       feature.set('popup', `<b>${feature.get('name')}</b><br>${text}`);
-      deactivateDraw(); // بعد الانتهاء من الرسم، العودة للوضع العادي
+      deactivateDraw();
     });
   }
 
-  // --- Désactiver le dessin ---
+  // --- Désactivation du dessin ---
   function deactivateDraw() {
     if (draw) {
       map.removeInteraction(draw);
@@ -200,9 +212,17 @@ Released under the MIT license: http://jsbin.mit-license.org
   document.getElementById('drawLine').onclick = () => toggleDraw('LineString', 'drawLine');
   document.getElementById('drawPolygon').onclick = () => toggleDraw('Polygon', 'drawPolygon');
 
+  document.getElementById('deleteFeature').onclick = function() {
+    deactivateDraw();
+    deleteMode = !deleteMode;
+    this.classList.toggle('active');
+  };
+
   document.getElementById('clearAll').onclick = () => {
-    source.clear();
-    overlay.setPosition(undefined);
+    if (confirm("⚠️ Supprimer tous les objets ?")) {
+      source.clear();
+      overlay.setPosition(undefined);
+    }
   };
 
   document.getElementById('downloadGeoJSON').onclick = () => {
