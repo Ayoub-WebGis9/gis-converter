@@ -1,129 +1,184 @@
 <!DOCTYPE html>
-<!--
-Created using JS Bin
-http://jsbin.com
-
-Copyright (c) 2025 by anonymous (http://jsbin.com/felogivade/1/edit)
-
-Released under the MIT license: http://jsbin.mit-license.org
--->
-<meta name="robots" content="noindex">
 <html lang="ar">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>محول الإحداثيات - CartoMaroc</title>
+<title>Coordinate Converter - CartoMaroc</title>
 
-<!-- مكتبة proj4 -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<!-- Google Font -->
+<link href="https://fonts.googleapis.com/css2?family=Zain&display=swap" rel="stylesheet">
 
 <style>
-  body {
-    font-family: "Segoe UI", Tahoma, sans-serif;
-    background: #f5f6fa;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-    margin: 0;
-  }
-  .container {
-    background: white;
-    padding: 20px 30px;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    text-align: center;
-    width: 340px;
-  }
-  h2 {
-    margin-bottom: 10px;
-    color: #0078d7;
-  }
-  input, select, button {
-    width: 100%;
-    padding: 10px;
-    margin: 6px 0;
-    border-radius: 6px;
-    border: 1px solid #ccc;
-    font-size: 15px;
-  }
-  button {
-    background: #0078d7;
-    color: white;
-    cursor: pointer;
-    border: none;
-  }
-  button:hover {
-    background: #005fa3;
-  }
-  .result {
-    margin-top: 15px;
-    background: #f0f8ff;
-    padding: 10px;
-    border-radius: 6px;
-    direction: ltr;
-  }
-  footer {
-    position: fixed;
-    bottom: 10px;
-    text-align: center;
-    width: 100%;
-    font-weight: bold;
-    color: #0078d7;
-  }
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: 'Zain', sans-serif;
+}
+#map {
+  width: 100%;
+  height: 100%;
+  font-size: 11px !important;
+}
+
+/* أداة التحويل */
+.converter {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(255,255,255,0.9);
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  font-size: 12px;
+  z-index: 1000;
+}
+
+.converter select, .converter input, .converter button {
+  font-family: 'Zain', sans-serif;
+  font-size: 12px;
+  margin-top: 4px;
+  width: 100%;
+}
+
+.copy-btn {
+  background: black;
+  color: white;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-top: 6px;
+  display: inline-block;
+  font-size: 11px;
+}
+
+/* التوقيع */
+#footer {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255,255,255,0.8);
+  padding: 3px 10px;
+  border-radius: 8px;
+  font-weight: bold;
+  font-size: 12px;
+  z-index: 1000;
+  font-family: 'Zain', sans-serif;
+}
 </style>
 </head>
 <body>
-  <div class="container">
-    <h2>🔁 محول الإحداثيات</h2>
-    <p>من / إلى WGS84 و Merchich</p>
 
-    <label>خط الطول (Longitude):</label>
-    <input type="number" id="lon" placeholder="-7.5" step="any">
+<div id="map"></div>
 
-    <label>خط العرض (Latitude):</label>
-    <input type="number" id="lat" placeholder="33.7" step="any">
+<div class="converter">
+  <label>نظام التحويل:</label>
+  <select id="zone">
+    <option value="nord_maroc">Nord Maroc</option>
+    <option value="sud_maroc">Sud Maroc</option>
+    <option value="nord_sahara">Nord Sahara</option>
+    <option value="sud_sahara">Sud Sahara</option>
+  </select>
+  <div id="coords"></div>
+</div>
 
-    <select id="direction">
-      <option value="wgs-to-merchich">WGS84 ➜ Merchich</option>
-      <option value="merchich-to-wgs">Merchich ➜ WGS84</option>
-    </select>
-
-    <button onclick="convert()">تحويل</button>
-
-    <div class="result" id="result">النتيجة ستظهر هنا</div>
-  </div>
-
-  <footer>© CartoMaroc</footer>
+<div id="footer">@CartoMaroc</div>
 
 <script>
-  // تعريف النظامين
-  proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
-  proj4.defs("EPSG:26191", "+proj=lambert_conformal_conic +lat_1=33.3 +lat_2=35.9 +lat_0=33.3 +lon_0=-5.4 +x_0=500000 +y_0=300000 +ellps=clrk80 +towgs84=-123,39,36,0,0,0,0 +units=m +no_defs");
+var map = L.map('map').setView([30, -7], 5);
 
-  function convert() {
-    const lon = parseFloat(document.getElementById("lon").value);
-    const lat = parseFloat(document.getElementById("lat").value);
-    const direction = document.getElementById("direction").value;
-    const resultDiv = document.getElementById("result");
+// الطبقة الأساسية (الأقمار الصناعية)
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19
+}).addTo(map);
 
-    if (isNaN(lon) || isNaN(lat)) {
-      resultDiv.innerHTML = "⚠️ الرجاء إدخال قيم صحيحة.";
-      return;
+// طبقة الأسماء والحدود (شفافة)
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19,
+    opacity: 1
+}).addTo(map);
+
+// حدود المناطق (خطوط أفقية متقطعة باللون الأصفر)
+var boundaries = [
+  { lat: 31.5 },
+  { lat: 27.45 },
+  { lat: 23.9667 }
+];
+
+// رسم الخطوط من الغرب (-13.5) إلى الشرق (-0.5) لتغطية كامل المغرب
+boundaries.forEach(b => {
+  L.polyline([[b.lat, -13.5], [b.lat, -0.5]], {
+    color: 'red',
+    weight: 2,
+    opacity: 3,
+    dashArray: '10, 10'
+  }).addTo(map);
+});
+
+var marker;
+  
+  function toDMS(dec){
+    const deg = Math.floor(dec);
+    const minFloat = (Math.abs(dec - deg)) * 60;
+    const min = Math.floor(minFloat);
+    const sec = Math.round((minFloat - min) * 60);
+    return `${deg}°${min}'${sec}"`;
+}
+
+
+map.on("click", function(e){
+    var lat = e.latlng.lat;
+    var lng = e.latlng.lng;
+
+    if (marker) map.removeLayer(marker);
+
+    marker = L.marker([lat, lng]).addTo(map)
+              .bindPopup(`Lat: ${lat.toFixed(6)}<br>Lng: ${lng.toFixed(6)}`)
+              .openPopup();
+
+    var zone = document.getElementById("zone").value;
+    var coordsText = `
+<p><b>Lat:</b> ${lat.toFixed(6)} &nbsp; <b>Lng:</b> ${lng.toFixed(6)}</p>
+<p><b>DMS:</b>  ${toDMS(lat)} , ${toDMS(lng)}</p>
+`;
+
+    coordsText += `<p><b>${zone}:</b> ${convertCoords(lat, lng, zone)}</p>`;
+    coordsText += `<span class="copy-btn" onclick="copyCoords('${lat.toFixed(6)}, ${lng.toFixed(6)}')">نسخ الإحداثيات</span>`;
+    document.getElementById("coords").innerHTML = coordsText;
+});
+
+function convertCoords(lat, lng, zone){
+    // تحويل تقريبي إلى Merchich (تمثيلي لأغراض العرض فقط)
+    let x, y;
+    switch(zone){
+        case "nord_maroc":
+            x = 140000 + (lng + 5) * 4000;
+            y = 400000 + (lat - 34) * 9000;
+            break;
+        case "sud_maroc":
+            x = 140000 + (lng + 5) * 4000;
+            y = 200000 + (lat - 30) * 9000;
+            break;
+        case "nord_sahara":
+            x = 140000 + (lng + 5) * 4000;
+            y = 100000 + (lat - 27) * 9000;
+            break;
+        case "sud_sahara":
+            x = 140000 + (lng + 5) * 4000;
+            y = 50000 + (lat - 25) * 9000;
+            break;
     }
+    return `${Math.round(x)} , ${Math.round(y)}`;
+}
 
-    let output;
-    if (direction === "wgs-to-merchich") {
-      const res = proj4("EPSG:4326", "EPSG:26191", [lon, lat]);
-      output = `X: ${res[0].toFixed(3)} m<br>Y: ${res[1].toFixed(3)} m`;
-    } else {
-      const res = proj4("EPSG:26191", "EPSG:4326", [lon, lat]);
-      output = `Longitude: ${res[0].toFixed(6)}<br>Latitude: ${res[1].toFixed(6)}`;
-    }
-
-    resultDiv.innerHTML = `<b>📍 النتيجة:</b><br>${output}`;
-  }
+function copyCoords(text){
+    navigator.clipboard.writeText(text);
+    alert("تم نسخ الإحداثيات!");
+}
 </script>
 </body>
 </html>
+
