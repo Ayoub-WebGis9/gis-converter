@@ -1,5 +1,0 @@
-flask
-geopandas
-shapely
-fiona
-pyproj
